@@ -8,8 +8,6 @@ const S = {
     description: '',
     selectedZone: null,   // null = global, number = zone index
     activeTab: 'content', // content | style | schedule
-    mergeMode: false,
-    mergeSelection: new Set(),
     dirty: false,
     zonePositionMap: [],  // [{r,c,rowSpan,colSpan}, ...]
 };
@@ -365,23 +363,22 @@ function renderGrid() {
 
                 const spanLabel = isMerged ? ` <span class="zone-span-badge">${colSpan}&times;${rowSpan}</span>` : '';
                 const typeBadge = zone.type !== 'empty' ? `<span class="zone-type-badge">${zone.type}</span>` : '';
-                let splitBtns = '';
-                if (colSpan > 1) {
-                    splitBtns += `<button class="zone-action-btn" onclick="event.stopPropagation(); splitZoneH(${i})" title="Split horizontally"><i class="material-icons">vertical_split</i></button>`;
-                }
-                if (rowSpan > 1) {
-                    splitBtns += `<button class="zone-action-btn" onclick="event.stopPropagation(); splitZoneV(${i})" title="Split vertically"><i class="material-icons">horizontal_split</i></button>`;
-                }
 
                 el.innerHTML = `
                     ${typeBadge}
-                    <div class="zone-actions">${splitBtns}</div>
                     <div class="zone-label">Zone ${i + 1}${spanLabel}</div>
+                    <div class="zone-resize-handle zone-resize-handle-e" data-mode="e" title="Drag to resize width"></div>
+                    <div class="zone-resize-handle zone-resize-handle-s" data-mode="s" title="Drag to resize height"></div>
+                    <div class="zone-resize-handle zone-resize-handle-se" data-mode="se" title="Drag to resize"></div>
                 `;
 
                 el.addEventListener('click', (e) => {
                     e.stopPropagation();
                     selectZone(i);
+                });
+
+                el.querySelectorAll('.zone-resize-handle').forEach(h => {
+                    h.addEventListener('mousedown', (ev) => startResizeDrag(ev, i, h.dataset.mode));
                 });
 
                 grid.appendChild(el);
@@ -390,89 +387,172 @@ function renderGrid() {
         }
     });
 
-    // Add merge handles between adjacent zones
-    renderMergeHandles(grid, occupied, rows, cols);
 }
 
-function renderMergeHandles(grid, occupied, rows, cols) {
-    // Build a map from (r,c) -> zone index
-    const cellToZone = Array.from({ length: rows }, () => Array(cols).fill(-1));
-    S.layout.zones.forEach((zone, i) => {
-        const pos = S.zonePositionMap[i];
+/* ── Drag-to-Resize ─────────────────────────────────────────── */
+let _dragState = null;
+
+function startResizeDrag(e, zoneIdx, mode) {
+    e.preventDefault();
+    e.stopPropagation();
+    const grid = document.getElementById('gridPreview');
+    const gridRect = grid.getBoundingClientRect();
+    const { rows, cols } = S.layout.grid;
+    const cs = getComputedStyle(grid);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const colGap = parseFloat(cs.columnGap || cs.gap) || 0;
+    const rowGap = parseFloat(cs.rowGap || cs.gap) || 0;
+    const cellW = (gridRect.width - padL - padR - (cols - 1) * colGap) / cols;
+    const cellH = (gridRect.height - padT - padB - (rows - 1) * rowGap) / rows;
+    const pos = S.zonePositionMap[zoneIdx];
+    if (!pos) return;
+
+    _dragState = {
+        zoneIdx, mode, gridRect, cellW, cellH, colGap, rowGap, padL, padT, rows, cols,
+        startRect: { r: pos.r, c: pos.c, rowSpan: pos.rowSpan, colSpan: pos.colSpan },
+        currentRect: { r: pos.r, c: pos.c, rowSpan: pos.rowSpan, colSpan: pos.colSpan },
+    };
+
+    document.body.classList.add('resizing-zone');
+    document.addEventListener('mousemove', onResizeMove);
+    document.addEventListener('mouseup', onResizeEnd);
+
+    showResizeGhost(_dragState.currentRect);
+}
+
+function onResizeMove(e) {
+    if (!_dragState) return;
+    const { gridRect, cellW, cellH, colGap, rowGap, padL, padT, rows, cols, mode, startRect } = _dragState;
+
+    const mx = e.clientX - gridRect.left - padL;
+    const my = e.clientY - gridRect.top - padT;
+    let mc = Math.max(0, Math.min(cols - 1, Math.floor(mx / (cellW + colGap))));
+    let mr = Math.max(0, Math.min(rows - 1, Math.floor(my / (cellH + rowGap))));
+
+    let { r, c, rowSpan, colSpan } = startRect;
+
+    if (mode.includes('e')) {
+        const newRight = Math.max(c, mc);
+        colSpan = newRight - c + 1;
+    }
+    if (mode.includes('s')) {
+        const newBottom = Math.max(r, mr);
+        rowSpan = newBottom - r + 1;
+    }
+
+    _dragState.currentRect = { r, c, rowSpan, colSpan };
+    showResizeGhost(_dragState.currentRect);
+}
+
+function onResizeEnd() {
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeEnd);
+    document.body.classList.remove('resizing-zone');
+    hideResizeGhost();
+
+    if (!_dragState) return;
+    const { zoneIdx, startRect, currentRect } = _dragState;
+    _dragState = null;
+
+    if (startRect.r === currentRect.r &&
+        startRect.c === currentRect.c &&
+        startRect.rowSpan === currentRect.rowSpan &&
+        startRect.colSpan === currentRect.colSpan) {
+        return;
+    }
+    applyZoneRect(zoneIdx, currentRect);
+}
+
+function showResizeGhost(rect) {
+    const grid = document.getElementById('gridPreview');
+    let ghost = document.getElementById('resizeGhost');
+    if (!ghost) {
+        ghost = document.createElement('div');
+        ghost.id = 'resizeGhost';
+        ghost.className = 'resize-ghost';
+        grid.appendChild(ghost);
+    }
+    ghost.style.gridRow = `${rect.r + 1} / span ${rect.rowSpan}`;
+    ghost.style.gridColumn = `${rect.c + 1} / span ${rect.colSpan}`;
+}
+
+function hideResizeGhost() {
+    const ghost = document.getElementById('resizeGhost');
+    if (ghost) ghost.remove();
+}
+
+function applyZoneRect(zoneIdx, newRect) {
+    const { rows, cols } = S.layout.grid;
+
+    const owner = Array.from({ length: rows }, () => Array(cols).fill(-1));
+    S.zonePositionMap.forEach((pos, i) => {
         if (!pos) return;
         for (let dr = 0; dr < pos.rowSpan; dr++)
             for (let dc = 0; dc < pos.colSpan; dc++)
-                cellToZone[pos.r + dr][pos.c + dc] = i;
+                owner[pos.r + dr][pos.c + dc] = i;
     });
 
-    const addedPairs = new Set();
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+            if (owner[r][c] === zoneIdx) owner[r][c] = -1;
 
-    // Horizontal merges (between columns)
+    for (let dr = 0; dr < newRect.rowSpan; dr++)
+        for (let dc = 0; dc < newRect.colSpan; dc++)
+            owner[newRect.r + dr][newRect.c + dc] = zoneIdx;
+
+    const oldZones = S.layout.zones;
+    const processed = Array.from({ length: rows }, () => Array(cols).fill(false));
+    const newZones = [];
+    let newSelectedIdx = null;
+    const ownerEmitted = new Set();
+
     for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols - 1; c++) {
-            const zoneA = cellToZone[r][c];
-            const zoneB = cellToZone[r][c + 1];
-            if (zoneA === -1 || zoneB === -1 || zoneA === zoneB) continue;
-            const pairKey = `h-${Math.min(zoneA, zoneB)}-${Math.max(zoneA, zoneB)}`;
-            if (addedPairs.has(pairKey)) continue;
-            addedPairs.add(pairKey);
+        for (let c = 0; c < cols; c++) {
+            if (processed[r][c]) continue;
+            const id = owner[r][c];
+            let cc = c;
+            while (cc < cols && !processed[r][cc] && owner[r][cc] === id) cc++;
+            const rectColSpan = cc - c;
+            let rr = r + 1;
+            while (rr < rows) {
+                let ok = true;
+                for (let k = c; k < c + rectColSpan; k++) {
+                    if (processed[rr][k] || owner[rr][k] !== id) { ok = false; break; }
+                }
+                if (!ok) break;
+                rr++;
+            }
+            const rectRowSpan = rr - r;
 
-            const posA = S.zonePositionMap[zoneA];
-            const posB = S.zonePositionMap[zoneB];
-            // Place handle at the border between them
-            const handleR = Math.max(posA.r, posB.r);
-            const handleRowSpan = Math.min(posA.r + posA.rowSpan, posB.r + posB.rowSpan) - handleR;
+            for (let dr = 0; dr < rectRowSpan; dr++)
+                for (let dc = 0; dc < rectColSpan; dc++)
+                    processed[r + dr][c + dc] = true;
 
-            const btn = document.createElement('button');
-            btn.className = 'merge-handle merge-handle-h';
-            btn.title = `Merge Zone ${zoneA + 1} and Zone ${zoneB + 1}`;
-            btn.style.gridRow = `${handleR + 1} / span ${handleRowSpan}`;
-            btn.style.gridColumn = `${c + 1} / span 2`;
-            btn.innerHTML = '<i class="material-icons">merge_type</i>';
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                mergeZonePair(zoneA, zoneB);
-            });
-            grid.appendChild(btn);
+            let zone;
+            if (id === -1) {
+                zone = makeEmptyZone(Date.now() + newZones.length);
+            } else if (!ownerEmitted.has(id)) {
+                ownerEmitted.add(id);
+                zone = { ...oldZones[id] };
+                if (id === zoneIdx) newSelectedIdx = newZones.length;
+            } else {
+                zone = makeEmptyZone(Date.now() + newZones.length);
+            }
+            zone.col_span = rectColSpan;
+            zone.row_span = rectRowSpan;
+            newZones.push(zone);
         }
     }
 
-    // Vertical merges (between rows)
-    for (let c = 0; c < cols; c++) {
-        for (let r = 0; r < rows - 1; r++) {
-            const zoneA = cellToZone[r][c];
-            const zoneB = cellToZone[r + 1][c];
-            if (zoneA === -1 || zoneB === -1 || zoneA === zoneB) continue;
-            const pairKey = `v-${Math.min(zoneA, zoneB)}-${Math.max(zoneA, zoneB)}`;
-            if (addedPairs.has(pairKey)) continue;
-            addedPairs.add(pairKey);
-
-            const posA = S.zonePositionMap[zoneA];
-            const posB = S.zonePositionMap[zoneB];
-            const handleC = Math.max(posA.c, posB.c);
-            const handleColSpan = Math.min(posA.c + posA.colSpan, posB.c + posB.colSpan) - handleC;
-
-            const btn = document.createElement('button');
-            btn.className = 'merge-handle merge-handle-v';
-            btn.title = `Merge Zone ${zoneA + 1} and Zone ${zoneB + 1}`;
-            btn.style.gridRow = `${r + 1} / span 2`;
-            btn.style.gridColumn = `${handleC + 1} / span ${handleColSpan}`;
-            btn.innerHTML = '<i class="material-icons">merge_type</i>';
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                mergeZonePair(zoneA, zoneB);
-            });
-            grid.appendChild(btn);
-        }
-    }
-}
-
-function mergeZonePair(a, b) {
-    S.mergeSelection.clear();
-    S.mergeSelection.add(a);
-    S.mergeSelection.add(b);
-    S.mergeMode = true;
-    applyMerge();
+    S.layout.zones = newZones;
+    S.selectedZone = newSelectedIdx;
+    renderGrid();
+    renderPanel();
+    markDirty();
+    updateLivePreview();
 }
 
 /* ── Selection ──────────────────────────────────────────────── */
@@ -1404,107 +1484,6 @@ async function searchWeatherLocation() {
 function toggleAccordion(btn) {
     const section = btn.closest('.accordion-section');
     section.classList.toggle('open');
-}
-
-/* ── Merge / Split ──────────────────────────────────────────── */
-function toggleMergeMode() {
-    S.mergeMode = !S.mergeMode;
-    S.mergeSelection.clear();
-    renderGrid();
-}
-
-function applyMerge() {
-    if (S.mergeSelection.size < 2) {
-        showToast('Select at least 2 adjacent zones to merge.', 'error');
-        return;
-    }
-
-    const positions = [];
-    for (const idx of S.mergeSelection) {
-        const pos = S.zonePositionMap[idx];
-        if (!pos) continue;
-        for (let dr = 0; dr < pos.rowSpan; dr++)
-            for (let dc = 0; dc < pos.colSpan; dc++)
-                positions.push({ r: pos.r + dr, c: pos.c + dc });
-    }
-
-    if (positions.length < 2) {
-        showToast('Select at least 2 adjacent zones to merge.', 'error');
-        return;
-    }
-
-    const minR = Math.min(...positions.map(p => p.r));
-    const maxR = Math.max(...positions.map(p => p.r));
-    const minC = Math.min(...positions.map(p => p.c));
-    const maxC = Math.max(...positions.map(p => p.c));
-
-    const posSet = new Set(positions.map(p => `${p.r},${p.c}`));
-    for (let r = minR; r <= maxR; r++) {
-        for (let c = minC; c <= maxC; c++) {
-            if (!posSet.has(`${r},${c}`)) {
-                showToast('Selection must form a complete rectangle.', 'error');
-                return;
-            }
-        }
-    }
-
-    const sortedIndices = [...S.mergeSelection].sort((a, b) => a - b);
-    const keepIndex = sortedIndices[0];
-    const removeIndices = sortedIndices.slice(1);
-
-    S.layout.zones[keepIndex].col_span = maxC - minC + 1;
-    S.layout.zones[keepIndex].row_span = maxR - minR + 1;
-
-    removeIndices.sort((a, b) => b - a).forEach(idx => {
-        S.layout.zones.splice(idx, 1);
-    });
-
-    S.mergeMode = false;
-    S.mergeSelection.clear();
-    S.selectedZone = null;
-
-    renderGrid();
-    renderPanel();
-    markDirty();
-    updateLivePreview();
-}
-
-function splitZoneH(zoneIndex) {
-    // Split horizontally: reduce col_span by 1, add a new zone
-    const zone = S.layout.zones[zoneIndex];
-    const colSpan = zone.col_span || 1;
-    if (colSpan <= 1) return;
-
-    zone.col_span = colSpan - 1;
-    // Insert a new 1-wide zone (inherits row_span)
-    const newZone = makeEmptyZone(Date.now());
-    newZone.row_span = zone.row_span || 1;
-    S.layout.zones.splice(zoneIndex + 1, 0, newZone);
-
-    if (S.selectedZone === zoneIndex) S.selectedZone = null;
-    renderGrid();
-    renderPanel();
-    markDirty();
-    updateLivePreview();
-}
-
-function splitZoneV(zoneIndex) {
-    // Split vertically: reduce row_span by 1, add a new zone
-    const zone = S.layout.zones[zoneIndex];
-    const rowSpan = zone.row_span || 1;
-    if (rowSpan <= 1) return;
-
-    zone.row_span = rowSpan - 1;
-    // Insert a new 1-tall zone (inherits col_span)
-    const newZone = makeEmptyZone(Date.now());
-    newZone.col_span = zone.col_span || 1;
-    S.layout.zones.splice(zoneIndex + 1, 0, newZone);
-
-    if (S.selectedZone === zoneIndex) S.selectedZone = null;
-    renderGrid();
-    renderPanel();
-    markDirty();
-    updateLivePreview();
 }
 
 /* ── Live Preview ───────────────────────────────────────────── */

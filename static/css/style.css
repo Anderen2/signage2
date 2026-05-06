@@ -710,36 +710,19 @@ body {
     overflow: visible;
 }
 
-/* Merge handles between zones */
-.merge-handle {
-    position: relative;
-    z-index: 5;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 2px solid var(--primary-color);
-    background: var(--primary-color);
-    color: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    transition: all 0.15s;
-    place-self: center;
+/* Drag-resize ghost preview */
+.resize-ghost {
+    pointer-events: none;
+    background: rgba(37, 99, 235, 0.18);
+    border: 2px dashed var(--primary-color);
+    border-radius: var(--radius-md);
+    z-index: 10;
 }
-.merge-handle:hover {
-    transform: scale(1.2);
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
-}
-.merge-handle .material-icons {
-    font-size: 16px;
-}
-.merge-handle-h {
-    justify-self: center;
-}
-.merge-handle-v {
-    align-self: center;
+
+body.resizing-zone,
+body.resizing-zone * {
+    cursor: nwse-resize !important;
+    user-select: none !important;
 }
 
 .grid-zone {
@@ -824,43 +807,60 @@ body {
     z-index: 2;
 }
 
-.zone-actions {
+/* Drag handles for zone resize */
+.zone-resize-handle {
     position: absolute;
-    top: 0.375rem;
-    right: 0.375rem;
-    display: flex;
-    gap: 0.25rem;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    z-index: 3;
+    background: transparent;
+    z-index: 4;
+    transition: background-color 0.12s ease;
 }
-
-.grid-zone:hover .zone-actions {
+.zone-resize-handle-e {
+    top: 6px;
+    bottom: 6px;
+    right: 0;
+    width: 6px;
+    cursor: ew-resize;
+}
+.zone-resize-handle-s {
+    left: 6px;
+    right: 6px;
+    bottom: 0;
+    height: 6px;
+    cursor: ns-resize;
+}
+.zone-resize-handle-se {
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    border-bottom-right-radius: var(--radius-md);
+}
+.zone-resize-handle-se::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--text-light);
+    border-bottom: 2px solid var(--text-light);
+    border-bottom-right-radius: 2px;
+    opacity: 0.6;
+    transition: border-color 0.12s ease, opacity 0.12s ease;
+}
+.grid-zone:hover .zone-resize-handle {
+    background: rgba(37, 99, 235, 0.15);
+}
+.grid-zone:hover .zone-resize-handle-se {
+    background: transparent;
+}
+.grid-zone:hover .zone-resize-handle-se::after {
+    border-color: var(--primary-color);
     opacity: 1;
 }
-
-.zone-action-btn {
-    background: var(--background-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: 0.25rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
-    transition: all 0.15s ease;
-    box-shadow: var(--shadow-sm);
-}
-
-.zone-action-btn:hover {
-    background: var(--error-color);
-    color: white;
-    border-color: var(--error-color);
-}
-
-.zone-action-btn .material-icons {
-    font-size: 0.875rem;
+.zone-resize-handle:hover {
+    background: var(--primary-color) !important;
 }
 
 /* Panel Header */
