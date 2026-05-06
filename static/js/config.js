@@ -96,13 +96,72 @@ function initConfigPage(id, layout, bg, description) {
         if (e.target === e.currentTarget) deselectZone();
     });
 
-    // Unsaved changes warning
+    // Unsaved changes warning — native dialog only as a fallback for
+    // tab-close/refresh, where the browser dialog is unavoidable.
     window.addEventListener('beforeunload', (e) => {
-        if (S.dirty) { e.preventDefault(); e.returnValue = ''; }
+        if (S.dirty && !S._bypassUnloadGuard) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    // Intercept in-app link clicks to show a styled modal instead of the native dialog.
+    document.addEventListener('click', (e) => {
+        const link = e.target.closest('a[href]');
+        if (!link || link.target === '_blank') return;
+        const href = link.getAttribute('href');
+        if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+        if (!S.dirty) return;
+        e.preventDefault();
+        showLeaveConfirmModal(href);
     });
 
     renderGrid();
     renderPanel();
+}
+
+/* ── Unsaved Changes Modal ──────────────────────────────────── */
+function showLeaveConfirmModal(href) {
+    const modal = document.createElement('div');
+    modal.className = 'modal leave-confirm-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:440px;">
+            <h3 style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                <i class="material-icons" style="color:var(--warning-color);">warning_amber</i>
+                Unsaved changes
+            </h3>
+            <p style="color:var(--text-secondary);margin:0;">
+                You have unsaved changes that will be lost if you leave this page.
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" data-action="cancel">Stay</button>
+                <button type="button" class="btn btn-danger" data-action="leave">Discard &amp; Leave</button>
+                <button type="button" class="btn btn-primary" data-action="save">
+                    <i class="material-icons">save</i>
+                    Save &amp; Leave
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const navigate = () => {
+        S._bypassUnloadGuard = true;
+        window.location.href = href;
+    };
+    const close = () => modal.remove();
+
+    modal.querySelector('[data-action="cancel"]').addEventListener('click', close);
+    modal.querySelector('[data-action="leave"]').addEventListener('click', () => { close(); navigate(); });
+    modal.querySelector('[data-action="save"]').addEventListener('click', async () => {
+        close();
+        await saveConfig();
+        if (!S.dirty) navigate();
+    });
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+    const onKey = (e) => {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
+    };
+    document.addEventListener('keydown', onKey);
 }
 
 /* ── Dirty Flag ─────────────────────────────────────────────── */
@@ -364,12 +423,25 @@ function renderGrid() {
                 const spanLabel = isMerged ? ` <span class="zone-span-badge">${colSpan}&times;${rowSpan}</span>` : '';
                 const typeBadge = zone.type !== 'empty' ? `<span class="zone-type-badge">${zone.type}</span>` : '';
 
+                const canN = r > 0 || rowSpan > 1;
+                const canS = r + rowSpan < rows || rowSpan > 1;
+                const canE = c + colSpan < cols || colSpan > 1;
+                const canW = c > 0 || colSpan > 1;
+                const handles = [
+                    canN && `<div class="zone-resize-handle zone-resize-handle-n" data-mode="n" title="Drag to resize"></div>`,
+                    canS && `<div class="zone-resize-handle zone-resize-handle-s" data-mode="s" title="Drag to resize"></div>`,
+                    canE && `<div class="zone-resize-handle zone-resize-handle-e" data-mode="e" title="Drag to resize"></div>`,
+                    canW && `<div class="zone-resize-handle zone-resize-handle-w" data-mode="w" title="Drag to resize"></div>`,
+                    canN && canE && `<div class="zone-resize-handle zone-resize-handle-corner zone-resize-handle-ne" data-mode="ne" title="Drag to resize"></div>`,
+                    canN && canW && `<div class="zone-resize-handle zone-resize-handle-corner zone-resize-handle-nw" data-mode="nw" title="Drag to resize"></div>`,
+                    canS && canE && `<div class="zone-resize-handle zone-resize-handle-corner zone-resize-handle-se" data-mode="se" title="Drag to resize"></div>`,
+                    canS && canW && `<div class="zone-resize-handle zone-resize-handle-corner zone-resize-handle-sw" data-mode="sw" title="Drag to resize"></div>`,
+                ].filter(Boolean).join('');
+
                 el.innerHTML = `
                     ${typeBadge}
                     <div class="zone-label">Zone ${i + 1}${spanLabel}</div>
-                    <div class="zone-resize-handle zone-resize-handle-e" data-mode="e" title="Drag to resize width"></div>
-                    <div class="zone-resize-handle zone-resize-handle-s" data-mode="s" title="Drag to resize height"></div>
-                    <div class="zone-resize-handle zone-resize-handle-se" data-mode="se" title="Drag to resize"></div>
+                    ${handles}
                 `;
 
                 el.addEventListener('click', (e) => {
@@ -433,14 +505,26 @@ function onResizeMove(e) {
     let mr = Math.max(0, Math.min(rows - 1, Math.floor(my / (cellH + rowGap))));
 
     let { r, c, rowSpan, colSpan } = startRect;
+    const startRight = startRect.c + startRect.colSpan - 1;
+    const startBottom = startRect.r + startRect.rowSpan - 1;
 
     if (mode.includes('e')) {
-        const newRight = Math.max(c, mc);
-        colSpan = newRight - c + 1;
+        const newRight = Math.max(startRect.c, mc);
+        colSpan = newRight - startRect.c + 1;
+    }
+    if (mode.includes('w')) {
+        const newLeft = Math.min(startRight, mc);
+        c = newLeft;
+        colSpan = startRight - newLeft + 1;
     }
     if (mode.includes('s')) {
-        const newBottom = Math.max(r, mr);
-        rowSpan = newBottom - r + 1;
+        const newBottom = Math.max(startRect.r, mr);
+        rowSpan = newBottom - startRect.r + 1;
+    }
+    if (mode.includes('n')) {
+        const newTop = Math.min(startBottom, mr);
+        r = newTop;
+        rowSpan = startBottom - newTop + 1;
     }
 
     _dragState.currentRect = { r, c, rowSpan, colSpan };

@@ -662,14 +662,14 @@ body {
 
 /* Positions */
 .grid-edge-remove-col {
-    top: 4px;
+    top: -12px;
     transform: translateX(-50%);
 }
 .grid-edge-remove-col:hover {
     transform: translateX(-50%);
 }
 .grid-edge-remove-row {
-    left: 4px;
+    left: -12px;
     transform: translateY(-50%);
 }
 .grid-edge-remove-row:hover {
@@ -685,12 +685,12 @@ body {
     z-index: 10;
 }
 .grid-edge-row {
-    bottom: 4px;
+    bottom: -14px;
     left: 50%;
     transform: translateX(-50%);
 }
 .grid-edge-col {
-    right: 4px;
+    right: -14px;
     top: 50%;
     transform: translateY(-50%);
 }
@@ -814,52 +814,58 @@ body.resizing-zone * {
     z-index: 4;
     transition: background-color 0.12s ease;
 }
-.zone-resize-handle-e {
-    top: 6px;
-    bottom: 6px;
-    right: 0;
-    width: 6px;
-    cursor: ew-resize;
-}
-.zone-resize-handle-s {
-    left: 6px;
-    right: 6px;
-    bottom: 0;
+/* Edge handles — narrow strips along each side, inset to avoid grid-edge buttons */
+.zone-resize-handle-n {
+    top: 0;
+    left: 14px;
+    right: 14px;
     height: 6px;
     cursor: ns-resize;
 }
-.zone-resize-handle-se {
-    right: 0;
+.zone-resize-handle-s {
     bottom: 0;
-    width: 14px;
-    height: 14px;
-    cursor: nwse-resize;
-    border-bottom-right-radius: var(--radius-md);
+    left: 14px;
+    right: 14px;
+    height: 6px;
+    cursor: ns-resize;
 }
-.zone-resize-handle-se::after {
-    content: "";
-    position: absolute;
-    right: 3px;
-    bottom: 3px;
-    width: 8px;
-    height: 8px;
-    border-right: 2px solid var(--text-light);
-    border-bottom: 2px solid var(--text-light);
-    border-bottom-right-radius: 2px;
-    opacity: 0.6;
-    transition: border-color 0.12s ease, opacity 0.12s ease;
+.zone-resize-handle-e {
+    right: 0;
+    top: 14px;
+    bottom: 14px;
+    width: 6px;
+    cursor: ew-resize;
 }
-.grid-zone:hover .zone-resize-handle {
-    background: rgba(37, 99, 235, 0.15);
+.zone-resize-handle-w {
+    left: 0;
+    top: 14px;
+    bottom: 14px;
+    width: 6px;
+    cursor: ew-resize;
 }
-.grid-zone:hover .zone-resize-handle-se {
-    background: transparent;
+/* Corner handles — solid colored squares, always visible */
+.zone-resize-handle-corner {
+    width: 12px;
+    height: 12px;
+    background: var(--primary-color);
+    border: 2px solid var(--background-primary);
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    opacity: 0.65;
 }
-.grid-zone:hover .zone-resize-handle-se::after {
-    border-color: var(--primary-color);
+.zone-resize-handle-nw { top: 2px;    left: 2px;   cursor: nwse-resize; }
+.zone-resize-handle-ne { top: 2px;    right: 2px;  cursor: nesw-resize; }
+.zone-resize-handle-sw { bottom: 2px; left: 2px;   cursor: nesw-resize; }
+.zone-resize-handle-se { bottom: 2px; right: 2px;  cursor: nwse-resize; }
+
+.grid-zone:hover .zone-resize-handle-corner,
+.zone-resize-handle-corner:hover {
     opacity: 1;
 }
-.zone-resize-handle:hover {
+.grid-zone:hover .zone-resize-handle:not(.zone-resize-handle-corner) {
+    background: rgba(37, 99, 235, 0.18);
+}
+.zone-resize-handle:not(.zone-resize-handle-corner):hover {
     background: var(--primary-color) !important;
 }
 
