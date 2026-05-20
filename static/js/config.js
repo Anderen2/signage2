@@ -61,6 +61,11 @@ const FONT_OPTIONS = `
     <option value="'Lucida Console', monospace">Lucida Console</option>
     <option value="Impact, sans-serif">Impact</option>
     <option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+</optgroup>
+<optgroup label="Emoji Fonts">
+    <option value="sans-serif, 'Noto Color Emoji'">Noto Color Emoji (color)</option>
+    <option value="sans-serif, 'Noto Emoji'">Noto Emoji (monochrome)</option>
+    <option value="sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'">System Emoji</option>
 </optgroup>`;
 
 /* ── Zone Type Definitions ──────────────────────────────────── */
@@ -1076,11 +1081,40 @@ function renderTypeSettings(zone, i) {
     }
 
     if (type === 'timer') {
+        const isDatetime = !!zone.timer_target;
         html += `
         <div class="form-field">
-            <label>Timer Duration (minutes)</label>
-            <input type="number" data-field="content" value="${escHtml(zone.content)}" min="1" placeholder="15">
-            <p class="help-text">Enter the number of minutes for the countdown timer</p>
+            <label>Timer Type</label>
+            <div class="option-cards" id="timerTypeCards">
+                <label class="option-card ${!isDatetime ? 'active' : ''}">
+                    <input type="radio" name="timerType" value="duration" ${!isDatetime ? 'checked' : ''}> Duration
+                </label>
+                <label class="option-card ${isDatetime ? 'active' : ''}">
+                    <input type="radio" name="timerType" value="datetime" ${isDatetime ? 'checked' : ''}> Date &amp; Time
+                </label>
+            </div>
+        </div>
+        <div id="timerDurationFields" style="display:${isDatetime ? 'none' : 'block'}">
+            <div class="form-field">
+                <label>Duration (minutes)</label>
+                <input type="number" data-field="content" value="${escHtml(zone.content)}" min="1" placeholder="15">
+                <p class="help-text">Minutes to count down. Displays MM:SS, HH:MM:SS, or Dd HH:MM:SS automatically. (1 day = 1440 min)</p>
+            </div>
+        </div>
+        <div id="timerDatetimeFields" style="display:${isDatetime ? 'block' : 'none'}">
+            <div class="form-field">
+                <label>Target Date &amp; Time</label>
+                <input type="datetime-local" data-field="timer_target" value="${escHtml(zone.timer_target || '')}">
+                <p class="help-text">Counts down to this exact date and time.</p>
+            </div>
+        </div>
+        <div class="form-field">
+            <label><input type="checkbox" data-field="timer_show_hms" ${zone.timer_show_hms !== false ? 'checked' : ''}> Show HH:MM:SS alongside days</label>
+            <p class="help-text">When unchecked, shows only "Xd" while counting down days.</p>
+        </div>
+        <div class="form-field">
+            <label>Label Text</label>
+            <input type="text" data-field="timer_label" value="${escHtml(zone.timer_label || '')}" placeholder="Countdown Timer">
         </div>`;
     }
 
@@ -1442,6 +1476,18 @@ function bindZonePanelEvents(i) {
 
             renderGrid();
             updateLivePreview();
+        });
+    });
+
+    // Timer type cards (duration vs. date & time)
+    panel.querySelectorAll('#timerTypeCards input[name="timerType"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            panel.querySelectorAll('#timerTypeCards .option-card').forEach(c => c.classList.remove('active'));
+            this.closest('.option-card').classList.add('active');
+            const isDt = this.value === 'datetime';
+            panel.querySelector('#timerDurationFields').style.display = isDt ? 'none' : 'block';
+            panel.querySelector('#timerDatetimeFields').style.display = isDt ? 'block' : 'none';
+            if (!isDt) { zone.timer_target = ''; markDirty(); renderGrid(); updateLivePreview(); }
         });
     });
 

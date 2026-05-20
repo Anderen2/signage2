@@ -171,20 +171,23 @@ function setupOrientation() {
 const _loadedFonts = new Set();
 
 function loadGoogleFont(fontFamily) {
-    // Extract the primary font name (before the comma/fallback)
-    const primary = fontFamily.split(',')[0].trim().replace(/['"]/g, '');
-    if (!primary || _loadedFonts.has(primary)) return;
+    // Scan every entry in the stack so stacked values like
+    // "sans-serif, 'Noto Color Emoji'" still load their Google Font.
+    const systemFonts = new Set(['Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana',
+        'Trebuchet MS', 'Lucida Console', 'Impact', 'Comic Sans MS',
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'sans-serif', 'serif', 'monospace']);
 
-    // Skip system fonts that don't need loading
-    const systemFonts = ['Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Trebuchet MS', 'Lucida Console', 'Impact', 'Comic Sans MS', 'sans-serif', 'serif', 'monospace'];
-    if (systemFonts.includes(primary)) return;
-
-    _loadedFonts.add(primary);
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(primary)}:wght@200;300;400;500;600;700&display=swap`;
-    document.head.appendChild(link);
-    console.log('Loaded Google Font:', primary);
+    fontFamily.split(',').forEach(entry => {
+        const name = entry.trim().replace(/['"]/g, '');
+        if (!name || _loadedFonts.has(name) || systemFonts.has(name)) return;
+        _loadedFonts.add(name);
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:wght@200;300;400;500;600;700&display=swap`;
+        document.head.appendChild(link);
+        console.log('Loaded Google Font:', name);
+    });
 }
 
 // ─── Background ───────────────────────────────────────────────
@@ -358,7 +361,7 @@ function createZone(zone, index) {
             createClockWidget(contentElement, zone);
             break;
         case 'timer':
-            createTimerWidget(contentElement, zone.content, index, zone.font_color || '');
+            createTimerWidget(contentElement, zone.content, index, zone.font_color || '', zone.timer_show_hms !== false, zone.timer_label || 'Countdown Timer', zone.timer_target || '');
             break;
         case 'announcement':
             createAnnouncementWidget(contentElement, zone, index);
@@ -417,16 +420,18 @@ function createClockWidget(container, zone) {
 
 // ─── Timer Widget ─────────────────────────────────────────────
 
-function createTimerWidget(container, duration, index, fontColor = '') {
+function createTimerWidget(container, duration, index, fontColor = '', showHms = true, label = 'Countdown Timer', timerTarget = '') {
     container.className += ' widget-timer';
 
-    const minutes = parseInt(duration) || 10;
-    const totalSeconds = minutes * 60;
+    const targetMs = timerTarget ? new Date(timerTarget).getTime() : 0;
+    const totalSeconds = targetMs
+        ? Math.max(0, Math.floor((targetMs - Date.now()) / 1000))
+        : (parseInt(duration) || 10) * 60;
 
     container.innerHTML = `
         <div>
             <div class="timer-display" id="timer-${index}">00:00</div>
-            <div class="timer-label">Countdown Timer</div>
+            <div class="timer-label">${escapeHtml(label)}</div>
             <div class="timer-progress-container">
                 <div class="timer-progress-bar" id="timer-progress-${index}" style="width: 100%;"></div>
             </div>
@@ -443,7 +448,7 @@ function createTimerWidget(container, duration, index, fontColor = '') {
         if (labelEl) labelEl.style.color = fontColor;
     }
 
-    startTimer(index, totalSeconds);
+    startTimer(index, totalSeconds, showHms, targetMs);
 }
 
 // ─── Announcement Widget ──────────────────────────────────────
@@ -863,15 +868,26 @@ function updateClock() {
 
 // ─── Timer ────────────────────────────────────────────────────
 
-function startTimer(index, totalSeconds) {
+function formatTimerDisplay(seconds, showHms = true) {
+    if (seconds <= 0) return '00:00';
+    const pad = n => n.toString().padStart(2, '0');
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (days >= 1) return showHms ? `${days}d ${pad(hours)}:${pad(mins)}:${pad(secs)}` : `${days}d`;
+    if (hours >= 1) return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    return `${pad(mins)}:${pad(secs)}`;
+}
+
+function startTimer(index, totalSeconds, showHms = true, targetMs = 0) {
     let remainingSeconds = totalSeconds;
     const warningThreshold = Math.min(60, totalSeconds * 0.2);
     const dangerThreshold = Math.min(10, totalSeconds * 0.05);
 
     const updateTimer = () => {
-        const mins = Math.floor(remainingSeconds / 60);
-        const secs = remainingSeconds % 60;
-        const display = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        if (targetMs) remainingSeconds = Math.max(0, Math.floor((targetMs - Date.now()) / 1000));
+        const display = formatTimerDisplay(remainingSeconds, showHms);
 
         const timerElement = document.getElementById(`timer-${index}`);
         const progressBar = document.getElementById(`timer-progress-${index}`);
@@ -907,7 +923,7 @@ function startTimer(index, totalSeconds) {
 
             if (remainingSeconds <= 0) {
                 timerElement.classList.add('timer-danger');
-                timerElement.textContent = '00:00';
+                timerElement.textContent = formatTimerDisplay(0);
                 if (progressBar) {
                     progressBar.style.width = '0%';
                 }
@@ -920,7 +936,7 @@ function startTimer(index, totalSeconds) {
             }
         }
 
-        remainingSeconds--;
+        if (!targetMs) remainingSeconds--;
     };
 
     updateTimer();
