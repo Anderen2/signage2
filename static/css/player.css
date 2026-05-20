@@ -348,7 +348,7 @@ body.bg-image {
     line-height: 1;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
-    background: linear-gradient(180deg, #fff 0%, rgba(255,255,255,0.85) 100%);
+    background: linear-gradient(180deg, var(--zone-font-color, #fff) 0%, var(--zone-font-color, #ffffffd9) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -377,7 +377,7 @@ body.bg-image {
 .timer-label {
     font-size: clamp(1rem, 2.5vw, 1.5rem);
     font-weight: 400;
-    color: var(--text-secondary);
+    color: var(--zone-font-color, var(--text-secondary));
     text-transform: uppercase;
     letter-spacing: 0.15em;
 }
@@ -728,7 +728,7 @@ body.bg-image {
     line-height: 1;
     letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
-    background: linear-gradient(180deg, #fff 0%, rgba(255,255,255,0.8) 100%);
+    background: linear-gradient(180deg, var(--zone-font-color, #fff) 0%, var(--zone-font-color, rgba(255,255,255,0.8)) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -736,7 +736,7 @@ body.bg-image {
 
 .weather-condition {
     font-size: clamp(0.9rem, 2vw, 1.2rem);
-    color: var(--text-secondary);
+    color: var(--zone-font-color, var(--text-secondary));
     font-weight: 400;
 }
 
@@ -749,7 +749,7 @@ body.bg-image {
 
 .weather-detail {
     font-size: clamp(0.8rem, 1.5vw, 1rem);
-    color: var(--text-secondary);
+    color: var(--zone-font-color, var(--text-secondary));
     display: flex;
     align-items: center;
     gap: 6px;
@@ -757,7 +757,7 @@ body.bg-image {
 
 .weather-location {
     font-size: clamp(0.75rem, 1.2vw, 0.9rem);
-    color: var(--text-muted);
+    color: var(--zone-font-color, var(--text-muted));
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -786,7 +786,7 @@ body.bg-image {
 .forecast-day-name {
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--zone-font-color, var(--text-secondary));
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -803,12 +803,12 @@ body.bg-image {
 }
 
 .forecast-high {
-    color: var(--text-primary);
+    color: var(--zone-font-color, var(--text-primary));
     font-weight: 500;
 }
 
 .forecast-low {
-    color: var(--text-muted);
+    color: var(--zone-font-color, var(--text-muted));
 }
 
 .weather-loading {

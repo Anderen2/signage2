@@ -314,7 +314,7 @@ function reconcileZones() {
 function makeEmptyZone(id) {
     return {
         id, type: 'empty', content: '', opacity: 1.0,
-        font_family: '', font_size: '16px',
+        font_family: '', font_size: '16px', font_color: '',
         background: { type: 'transparent' },
         date_format: 'full', time_format: '24h'
     };
@@ -1239,6 +1239,14 @@ function renderStyleTab(zone) {
                 <label>Font Size</label>
                 <input type="text" data-field="font_size" value="${escHtml(zone.font_size || '16px')}" placeholder="16px, 1.2em, etc.">
             </div>
+            <div class="form-field">
+                <label>Font Color</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="checkbox" id="fontColorEnabled" ${zone.font_color ? 'checked' : ''}>
+                    <input type="color" id="fontColorPicker" value="${zone.font_color || '#ffffff'}" ${!zone.font_color ? 'disabled' : ''} style="width:40px;height:28px;padding:2px;border-radius:4px;cursor:pointer;">
+                    <span id="fontColorLabel" style="font-size:0.8em;color:var(--text-muted)">${zone.font_color || 'Default'}</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1470,6 +1478,33 @@ function bindZonePanelEvents(i) {
             }
         });
     });
+
+    // Font color toggle + picker
+    const fontColorEnabled = panel.querySelector('#fontColorEnabled');
+    const fontColorPicker = panel.querySelector('#fontColorPicker');
+    const fontColorLabel = panel.querySelector('#fontColorLabel');
+    if (fontColorEnabled && fontColorPicker) {
+        fontColorEnabled.addEventListener('change', () => {
+            if (fontColorEnabled.checked) {
+                fontColorPicker.disabled = false;
+                zone.font_color = fontColorPicker.value;
+            } else {
+                fontColorPicker.disabled = true;
+                zone.font_color = '';
+            }
+            if (fontColorLabel) fontColorLabel.textContent = zone.font_color || 'Default';
+            markDirty();
+            renderGrid();
+            updateLivePreview();
+        });
+        fontColorPicker.addEventListener('input', () => {
+            zone.font_color = fontColorPicker.value;
+            if (fontColorLabel) fontColorLabel.textContent = zone.font_color;
+            markDirty();
+            renderGrid();
+            updateLivePreview();
+        });
+    }
 
     // Zone background image
     const zbImg = document.getElementById('zoneBackgroundImage');

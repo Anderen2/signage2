@@ -347,6 +347,10 @@ function createZone(zone, index) {
     contentElement.style.fontFamily = zoneFont;
     contentElement.style.fontSize = zoneFontSize;
 
+    if (zone.font_color) {
+        zoneElement.style.setProperty('--zone-font-color', zone.font_color);
+    }
+
     console.log('Applying font:', zoneFont, 'size:', zoneFontSize);
 
     switch (zone.type) {
@@ -354,7 +358,7 @@ function createZone(zone, index) {
             createClockWidget(contentElement, zone);
             break;
         case 'timer':
-            createTimerWidget(contentElement, zone.content, index);
+            createTimerWidget(contentElement, zone.content, index, zone.font_color || '');
             break;
         case 'announcement':
             createAnnouncementWidget(contentElement, zone, index);
@@ -413,7 +417,7 @@ function createClockWidget(container, zone) {
 
 // ─── Timer Widget ─────────────────────────────────────────────
 
-function createTimerWidget(container, duration, index) {
+function createTimerWidget(container, duration, index, fontColor = '') {
     container.className += ' widget-timer';
 
     const minutes = parseInt(duration) || 10;
@@ -428,6 +432,16 @@ function createTimerWidget(container, duration, index) {
             </div>
         </div>
     `;
+
+    if (fontColor) {
+        // Set directly on the elements so CSS var() resolves here, not via inheritance.
+        // Warning/danger class backgrounds still override because they use higher-specificity
+        // selectors (.timer-display.timer-warning) that don't depend on --zone-font-color.
+        const timerEl = container.querySelector(`#timer-${index}`);
+        const labelEl = container.querySelector('.timer-label');
+        if (timerEl) timerEl.style.setProperty('--zone-font-color', fontColor);
+        if (labelEl) labelEl.style.color = fontColor;
+    }
 
     startTimer(index, totalSeconds);
 }
@@ -699,6 +713,9 @@ function createWeatherWidget(container, zone, index) {
     const location = zone.weather_location || 'Unknown';
     const refreshMin = zone.weather_refresh || 30;
 
+    // Store font color so loadWeather can access it on refresh too
+    container.dataset.fontColor = zone.font_color || '';
+
     container.innerHTML = `
         <div class="weather-container">
             <div class="weather-loading">Loading weather...</div>
@@ -728,6 +745,10 @@ async function loadWeather(container, lat, lon, units, location, index) {
         const c = data.current;
         const unitSymbol = c.unit || '°C';
         const windUnit = c.wind_unit || 'km/h';
+        const fontColor = container.dataset.fontColor || '';
+        const cs = fontColor ? ` style="color:${fontColor}"` : '';
+        // .weather-temp uses background-clip:text, so override at the paint level
+        const tempCs = fontColor ? ` style="-webkit-text-fill-color:${fontColor};background:none"` : '';
 
         let forecastHtml = '';
         if (data.forecast && data.forecast.length > 0) {
@@ -736,11 +757,11 @@ async function loadWeather(container, lat, lon, units, location, index) {
                 const dayName = new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
                 forecastHtml += `
                     <div class="weather-forecast-day">
-                        <div class="forecast-day-name">${dayName}</div>
+                        <div class="forecast-day-name"${cs}>${dayName}</div>
                         <div class="forecast-emoji">${day.emoji}</div>
                         <div class="forecast-temps">
-                            <span class="forecast-high">${Math.round(day.temp_max)}°</span>
-                            <span class="forecast-low">${Math.round(day.temp_min)}°</span>
+                            <span class="forecast-high"${cs}>${Math.round(day.temp_max)}°</span>
+                            <span class="forecast-low"${cs}>${Math.round(day.temp_min)}°</span>
                         </div>
                     </div>
                 `;
@@ -751,14 +772,14 @@ async function loadWeather(container, lat, lon, units, location, index) {
         container.querySelector('.weather-container').innerHTML = `
             <div class="weather-current">
                 <div class="weather-emoji">${c.emoji}</div>
-                <div class="weather-temp">${Math.round(c.temperature)}${unitSymbol}</div>
-                <div class="weather-condition">${c.condition}</div>
+                <div class="weather-temp"${tempCs}>${Math.round(c.temperature)}${unitSymbol}</div>
+                <div class="weather-condition"${cs}>${c.condition}</div>
             </div>
             <div class="weather-details">
-                <div class="weather-detail"><span>💧</span> ${c.humidity}%</div>
-                <div class="weather-detail"><span>💨</span> ${Math.round(c.wind_speed)} ${windUnit}</div>
+                <div class="weather-detail"${cs}><span>💧</span> ${c.humidity}%</div>
+                <div class="weather-detail"${cs}><span>💨</span> ${Math.round(c.wind_speed)} ${windUnit}</div>
             </div>
-            <div class="weather-location">${escapeHtml(location)}</div>
+            <div class="weather-location"${cs}>${escapeHtml(location)}</div>
             ${forecastHtml}
         `;
     } catch (error) {
