@@ -673,14 +673,14 @@ function createSlideshowWidget(container, content, index) {
 
         container.innerHTML = `
             <div class="slideshow-container" id="slideshow-${index}">
-                <img class="slideshow-image" alt="Slideshow Image" />
+                <img class="slideshow-image" alt="Slideshow Image" style="object-fit: contain;" />
                 <div class="slideshow-timer-indicator" style="display: none; opacity: 0;">
                     <span>${slideTimer / 1000}s</span>
                 </div>
             </div>
         `;
 
-        startSlideshow(index, processedImages, slideTimer);
+        startSlideshow(index, processedImages, slideTimer, container.querySelector('.slideshow-container'));
     } else {
         container.innerHTML = `
             <div class="empty-text">No slideshow content provided</div>
@@ -908,9 +908,9 @@ function startTimer(index, totalSeconds) {
 
 // ─── Slideshow ────────────────────────────────────────────────
 
-function startSlideshow(index, images, slideTimer = 5000) {
+function startSlideshow(index, images, slideTimer = 5000, el = null) {
     let currentImageIndex = 0;
-    const slideshowContainer = document.getElementById(`slideshow-${index}`);
+    const slideshowContainer = el || document.getElementById(`slideshow-${index}`);
     const imageElement = slideshowContainer.querySelector('.slideshow-image');
     const timerIndicator = slideshowContainer.querySelector('.slideshow-timer-indicator');
 
